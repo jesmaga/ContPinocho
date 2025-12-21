@@ -1,0 +1,2 @@
+2025-12-21 12:26:02.065744: Starting process for file: Movimientos_21_12_2025-2.xlsx
+2025-12-21 12:26:02.065777: Processing sheet with columns: ['Fecha', 'Concepto', 'Importe']
