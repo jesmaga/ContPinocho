@@ -24,3 +24,5 @@ openpyxl
 reportlab
 pydantic
 pandas
+seaborn
+matplotlib
