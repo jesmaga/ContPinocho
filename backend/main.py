@@ -115,6 +115,14 @@ app = FastAPI(title="Accounting App API", lifespan=lifespan)
 
 # ... (Existing middleware and routes)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # En producción, cambia "*" por la URL de tu frontend en Vercel
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # (Static files moved to end of file)
 
 # (Previous Main Block Removed)
