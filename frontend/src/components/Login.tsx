@@ -41,7 +41,8 @@ export const Login: React.FC = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-100">
-            <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
+            <div className="bg-white p-8 rounded shadow-md w-full max-w-md flex flex-col items-center">
+                <img src="/Logo.png" alt="Logo" className="h-20 w-auto mb-6 object-contain" />
                 <h2 className="text-2xl font-bold mb-6 text-center text-gray-800">Iniciar Sesión</h2>
                 {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">{error}</div>}
                 <form onSubmit={handleSubmit}>

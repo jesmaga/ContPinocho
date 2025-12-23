@@ -35,9 +35,8 @@ export const Layout: React.FC = () => {
             {/* Sidebar */}
             <aside className="w-64 bg-[#1E1E1E] border-r border-[#333] hidden md:flex flex-col sticky top-0 h-screen z-10">
                 <div className="p-6">
-                    <div className="flex items-center space-x-2 text-indigo-400 font-bold text-xl">
-                        <Wallet className="w-8 h-8" />
-                        <span>Contabilidad</span>
+                    <div className="flex items-center justify-center mb-6">
+                        <img src="/Logo.png" alt="Logo" className="h-16 w-auto object-contain" />
                     </div>
                 </div>
                 <nav className="flex-1 px-4 space-y-2 mt-4">
