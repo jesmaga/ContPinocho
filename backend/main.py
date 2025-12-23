@@ -540,11 +540,18 @@ async def restore_backup(
     content = await file.read()
     try:
         data = json.loads(content)
-    except Exception:
+        print(f"DEBUG RESTORE: JSON Loaded. Keys: {data.keys()}")
+        if "transactions" in data:
+            print(f"DEBUG RESTORE: {len(data['transactions'])} transactions found.")
+        if "categories" in data:
+            print(f"DEBUG RESTORE: {len(data['categories'])} categories found.")
+    except Exception as e:
+         print(f"DEBUG RESTORE: JSON Load Error: {e}")
          raise HTTPException(status_code=400, detail="Invalid JSON file")
          
     # Validate structure
     if "transactions" not in data or "rules" not in data or "categories" not in data:
+         print("DEBUG RESTORE: Missing keys in JSON")
          raise HTTPException(status_code=400, detail="Invalid Backup Format")
          
     try:

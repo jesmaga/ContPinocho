@@ -72,9 +72,10 @@ export const SecurityPage: React.FC = () => {
             });
             alert("Restauración completada con éxito.");
             window.location.reload(); // Reload to show new data
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error restoring backup", error);
-            alert("Error al restaurar la copia de seguridad.");
+            const msg = error.response?.data?.detail || "Error al restaurar la copia de seguridad.";
+            alert(`Fallo en la restauración: ${msg}`);
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
