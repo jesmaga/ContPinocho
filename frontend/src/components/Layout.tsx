@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Settings, List, FileText, Shield, LogOut, User } from 'lucide-react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Settings, List, FileText, Shield, LogOut, User, Menu, X } from 'lucide-react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { PeriodSelector } from './PeriodSelector';
 import type { SystemMetadata } from '../types';
@@ -8,13 +8,20 @@ import { useAuth } from '../context/AuthContext';
 
 export const Layout: React.FC = () => {
     const [lastUpdate, setLastUpdate] = useState<string>('');
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { logout, user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
+
+    // Close mobile menu when route changes
+    useEffect(() => {
+        setIsMobileMenuOpen(false);
+    }, [location.pathname]);
 
     useEffect(() => {
         const fetchLastUpdate = async () => {
@@ -31,15 +38,51 @@ export const Layout: React.FC = () => {
     }, []);
 
     return (
-        <div className="min-h-screen bg-[#121212] flex">
+        <div className="min-h-screen bg-[#121212] flex flex-col md:flex-row">
+            {/* Mobile Header with Hamburger */}
+            <div className="md:hidden bg-[#1E1E1E] border-b border-[#333] p-4 flex items-center justify-between sticky top-0 z-20">
+                <div className="flex items-center space-x-2">
+                    <img src="/Logo.png" alt="Logo" className="h-10 w-auto object-contain" />
+                </div>
+                <button
+                    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                    className="text-slate-200 p-2 hover:bg-[#2A2A2A] rounded-lg"
+                >
+                    {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                </button>
+            </div>
+
+            {/* Mobile Overlay */}
+            {isMobileMenuOpen && (
+                <div
+                    className="fixed inset-0 bg-black/50 z-20 md:hidden"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                />
+            )}
+
             {/* Sidebar */}
-            <aside className="w-64 bg-[#1E1E1E] border-r border-[#333] hidden md:flex flex-col sticky top-0 h-screen z-10">
-                <div className="p-6">
+            <aside className={`
+                fixed md:sticky md:top-0 h-screen z-30
+                w-64 bg-[#1E1E1E] border-r border-[#333] 
+                transition-transform duration-300 ease-in-out
+                ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+                md:translate-x-0 md:flex flex-col
+            `}>
+                <div className="p-6 hidden md:block">
                     <div className="flex items-center justify-center mb-6">
                         <img src="/Logo.png" alt="Logo" className="h-40 w-auto object-contain" />
                     </div>
                 </div>
-                <nav className="flex-1 px-4 space-y-2 mt-4">
+
+                {/* Mobile specific header inside sidebar to show logo there too if needed, or close button */}
+                <div className="md:hidden p-6 flex justify-between items-center bg-[#1E1E1E]">
+                    <img src="/Logo.png" alt="Logo" className="h-12 w-auto object-contain" />
+                    <button onClick={() => setIsMobileMenuOpen(false)} className="text-slate-400">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <nav className="flex-1 px-4 space-y-2 mt-4 overflow-y-auto">
                     <NavLink
                         to="/"
                         className={({ isActive }) =>
@@ -131,19 +174,21 @@ export const Layout: React.FC = () => {
             </aside>
 
             {/* Main Content */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
                 {/* Header with Period Selector */}
-                <header className="bg-[#1E1E1E] border-b border-[#333] px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+                <header className="bg-[#1E1E1E] border-b border-[#333] px-4 md:px-8 py-4 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center sticky top-0 z-10 w-full">
                     <div>
                         <h2 className="font-semibold text-slate-100">Panel de Gestión</h2>
                         {lastUpdate && (
                             <p className="text-xs text-slate-500 mt-1">Última act: {lastUpdate}</p>
                         )}
                     </div>
-                    <PeriodSelector />
+                    <div className="w-full md:w-auto">
+                        <PeriodSelector />
+                    </div>
                 </header>
 
-                <main className="flex-1 overflow-y-auto">
+                <main className="flex-1 overflow-y-auto p-4 md:p-0">
                     <Outlet />
                 </main>
             </div>
