@@ -26,3 +26,4 @@ pydantic
 pandas
 seaborn
 matplotlib
+psycopg2-binary

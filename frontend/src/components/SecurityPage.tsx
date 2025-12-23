@@ -1,6 +1,13 @@
-import React, { useState, useRef } from 'react';
-import { Shield, Download, Upload, AlertTriangle, FileText, Calendar, Trash2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Shield, Download, Upload, AlertTriangle, FileText, Calendar, Trash2, Users, UserPlus, X } from 'lucide-react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+
+interface User {
+    id: number;
+    username: string;
+    role: string;
+}
 // import { usePeriod } from '../context/PeriodContext'; 
 
 export const SecurityPage: React.FC = () => {
@@ -74,12 +81,190 @@ export const SecurityPage: React.FC = () => {
         }
     };
 
+    // User Management State
+    const [users, setUsers] = useState<User[]>([]);
+    const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+    const [newUserUsername, setNewUserUsername] = useState('');
+    const [newUserPassword, setNewUserPassword] = useState('');
+    const [newUserRole, setNewUserRole] = useState('user');
+    const { user: currentUser } = useAuth(); // rename to avoid conflict with User interface
+
+    useEffect(() => {
+        fetchUsers();
+    }, []);
+
+    const fetchUsers = async () => {
+        try {
+            const res = await axios.get<User[]>('/users');
+            setUsers(res.data);
+        } catch (error) {
+            console.error("Error fetching users", error);
+        }
+    };
+
+    const handleCreateUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await axios.post('/users', {
+                username: newUserUsername,
+                password: newUserPassword,
+                role: newUserRole
+            });
+            alert("Usuario creado con éxito");
+            setIsUserModalOpen(false);
+            setNewUserUsername('');
+            setNewUserPassword('');
+            setNewUserRole('user');
+            fetchUsers();
+        } catch (error) {
+            console.error("Error creating user", error);
+            alert("Error al crear usuario. El nombre puede estar duplicado.");
+        }
+    };
+
+    const handleDeleteUser = async (userId: number) => {
+        if (!confirm("¿Estás seguro de eliminar este usuario?")) return;
+        try {
+            await axios.delete(`/users/${userId}`);
+            fetchUsers();
+        } catch (error) {
+            console.error("Error deleting user", error);
+            alert("Error al eliminar usuario.");
+        }
+    };
+
     return (
         <div className="p-8 space-y-8 max-w-7xl mx-auto">
             <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
                 <Shield className="w-8 h-8 text-indigo-500" />
-                Seguridad y Copias de Seguridad
+                Seguridad y Gestión de Usuarios
             </h1>
+
+            {/* USER MANAGEMENT SECTION */}
+            <div className="bg-[#1E1E1E] p-6 rounded-xl border border-[#333]">
+                <div className="flex justify-between items-center mb-6">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                            <Users className="w-5 h-5 text-indigo-400" />
+                            Gestión de Usuarios
+                        </h2>
+                        <p className="text-slate-400 text-sm">Administra quién tiene acceso a la aplicación.</p>
+                    </div>
+                    <button
+                        onClick={() => setIsUserModalOpen(true)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        Nuevo Usuario
+                    </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr className="border-b border-[#333] text-slate-400 text-sm">
+                                <th className="p-3">ID</th>
+                                <th className="p-3">Usuario</th>
+                                <th className="p-3">Rol</th>
+                                <th className="p-3 text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {users.map(u => (
+                                <tr key={u.id} className="border-b border-[#333]/50 hover:bg-[#2A2A2A] transition-colors text-slate-200">
+                                    <td className="p-3 text-slate-500 text-sm">#{u.id}</td>
+                                    <td className="p-3 font-medium">{u.username}</td>
+                                    <td className="p-3">
+                                        <span className={`px-2 py-1 rounded text-xs font-medium ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-300'}`}>
+                                            {u.role.toUpperCase()}
+                                        </span>
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        {u.username !== 'admin' && u.id !== currentUser?.id && (
+                                            <button
+                                                onClick={() => handleDeleteUser(u.id)}
+                                                className="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/10 transition-colors"
+                                                title="Eliminar usuario"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* Modal Create User */}
+            {isUserModalOpen && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-[#1E1E1E] border border-[#333] rounded-xl w-full max-w-md p-6 relative shadow-2xl">
+                        <button
+                            onClick={() => setIsUserModalOpen(false)}
+                            className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <h3 className="text-xl font-bold text-slate-100 mb-4 flex items-center gap-2">
+                            <UserPlus className="w-5 h-5 text-indigo-500" />
+                            Crear Nuevo Usuario
+                        </h3>
+
+                        <form onSubmit={handleCreateUser} className="space-y-4">
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Nombre de Usuario</label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={newUserUsername}
+                                    onChange={e => setNewUserUsername(e.target.value)}
+                                    className="w-full bg-[#121212] border border-[#333] rounded px-3 py-2 text-slate-100 focus:border-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Contraseña</label>
+                                <input
+                                    type="password"
+                                    required
+                                    value={newUserPassword}
+                                    onChange={e => setNewUserPassword(e.target.value)}
+                                    className="w-full bg-[#121212] border border-[#333] rounded px-3 py-2 text-slate-100 focus:border-indigo-500 outline-none"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Rol</label>
+                                <select
+                                    value={newUserRole}
+                                    onChange={e => setNewUserRole(e.target.value)}
+                                    className="w-full bg-[#121212] border border-[#333] rounded px-3 py-2 text-slate-100 focus:border-indigo-500 outline-none"
+                                >
+                                    <option value="user">Usuario (Solo Consulta/Edición básica)</option>
+                                    <option value="admin">Administrador (Acceso Total)</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsUserModalOpen(false)}
+                                    className="flex-1 py-2 bg-[#333] hover:bg-[#444] text-slate-200 rounded font-medium transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-medium transition-colors"
+                                >
+                                    Crear Usuario
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 

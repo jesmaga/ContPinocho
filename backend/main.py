@@ -1,8 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Form
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Form, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
-import models, schemas, logic, reports
+import models, schemas, logic, reports, auth
 import io
 from fastapi.responses import StreamingResponse
 from datetime import date
@@ -107,11 +108,56 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Migration check failed: {e}")
 
+    # MIGRATION: Check for role column in users
+    try:
+        from sqlalchemy import text
+        result = db.execute(text("PRAGMA table_info(users)"))
+        columns = [row[1] for row in result]
+        if columns and 'role' not in columns:
+            print("Migrating: Adding role column to users...")
+            db.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'user'"))
+            db.commit()
+    except Exception as e:
+         print(f"Migration check for users failed: {e}")
+
+    # Seed Admin User
+    admin_user = db.query(models.User).filter(models.User.username == "admin").first()
+    if not admin_user:
+        print("Seeding admin user...")
+        hashed_pwd = auth.get_password_hash("admin")
+        user = models.User(username="admin", hashed_password=hashed_pwd, role="admin")
+        db.add(user)
+        db.commit()
+    else:
+        # Ensure admin has admin role (fix for existing admin)
+        if admin_user.role != "admin":
+             print("Updating admin privileges...")
+             admin_user.role = "admin"
+             db.commit()
     
     yield
     # Shutdown logic (if any)
 
 app = FastAPI(title="Accounting App API", lifespan=lifespan)
+
+@app.post("/token", response_model=schemas.Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == form_data.username).first()
+    if not user or not auth.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = auth.timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = auth.create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/users/me", response_model=schemas.User)
+async def read_users_me(current_user: models.User = Depends(auth.get_current_active_user)):
+    return current_user
 
 # ... (Existing middleware and routes)
 
@@ -128,7 +174,7 @@ app.add_middleware(
 # (Previous Main Block Removed)
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     content = await file.read()
     try:
         result = logic.process_file(content, file.filename, db)
@@ -154,7 +200,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/last-update", response_model=schemas.SystemMetadata)
-def get_last_update(db: Session = Depends(get_db)):
+def get_last_update(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     meta = db.query(models.SystemMetadata).filter(models.SystemMetadata.key == "last_import").first()
     if not meta:
         return {"key": "last_import", "value": "Nunca"}
@@ -165,7 +211,8 @@ def get_transactions(
     start_date: Optional[str] = None, # YYYY-MM-DD
     end_date: Optional[str] = None,   # YYYY-MM-DD
     category: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
 ):
     query = db.query(models.Transaction)
     
@@ -183,7 +230,8 @@ def get_transactions(
 def update_transaction(
     transaction_id: int, 
     update_data: schemas.TransactionUpdateCategory, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
 ):
     db_trans = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
     if not db_trans:
@@ -229,7 +277,7 @@ def update_transaction(
     return db_trans
 
 @app.post("/transactions", response_model=schemas.Transaction)
-def create_manual_transaction(trans: schemas.TransactionCreate, db: Session = Depends(get_db)):
+def create_manual_transaction(trans: schemas.TransactionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     # Calculate School Year and Hash
     school_year = logic.calculate_school_year(trans.fecha)
     unique_hash = logic.generate_hash(trans.fecha, trans.concepto, trans.importe)
@@ -259,7 +307,7 @@ def create_manual_transaction(trans: schemas.TransactionCreate, db: Session = De
 
 
 @app.delete("/transactions/{transaction_id}")
-def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
+def delete_transaction(transaction_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     db_trans = db.query(models.Transaction).filter(models.Transaction.id == transaction_id).first()
     if not db_trans:
         raise HTTPException(status_code=404, detail="Movimiento no encontrado")
@@ -269,7 +317,7 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     return {"message": "Movimiento eliminado"}
 
 @app.post("/transactions/remove-duplicates")
-def remove_duplicate_transactions(db: Session = Depends(get_db)):
+def remove_duplicate_transactions(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     try:
         count = logic.remove_duplicates(db)
         return {"message": "Duplicate removal complete", "deleted_count": count}
@@ -281,7 +329,8 @@ def remove_duplicate_transactions(db: Session = Depends(get_db)):
 def get_dashboard_kpis(
     start_date: Optional[str] = None, 
     end_date: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
 ):
     query = db.query(models.Transaction)
     if start_date:
@@ -321,7 +370,8 @@ def get_monthly_stats(
     start_date: Optional[str] = None, 
     end_date: Optional[str] = None,
     category: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
 ):
     query = db.query(models.Transaction)
     if start_date:
@@ -353,11 +403,11 @@ def get_monthly_stats(
 # --- RULES CRUD ---
 
 @app.get("/rules", response_model=List[schemas.Rule])
-def get_rules(db: Session = Depends(get_db)):
+def get_rules(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     return db.query(models.CategorizationRule).order_by(models.CategorizationRule.prioridad.desc()).all()
 
 @app.post("/rules", response_model=schemas.Rule)
-def create_rule(rule: schemas.RuleCreate, db: Session = Depends(get_db)):
+def create_rule(rule: schemas.RuleCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     db_rule = models.CategorizationRule(
         palabra_clave=rule.palabra_clave,
         categoria_asignada=rule.categoria_asignada,
@@ -373,7 +423,7 @@ def create_rule(rule: schemas.RuleCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Rule already exists")
 
 @app.put("/rules/{rule_id}", response_model=schemas.Rule)
-def update_rule(rule_id: int, rule_update: schemas.RuleUpdate, db: Session = Depends(get_db)):
+def update_rule(rule_id: int, rule_update: schemas.RuleUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     db_rule = db.query(models.CategorizationRule).filter(models.CategorizationRule.id == rule_id).first()
     if not db_rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -394,7 +444,7 @@ def update_rule(rule_id: int, rule_update: schemas.RuleUpdate, db: Session = Dep
         raise HTTPException(status_code=400, detail="Error updating rule")
 
 @app.delete("/rules/{rule_id}")
-def delete_rule(rule_id: int, db: Session = Depends(get_db)):
+def delete_rule(rule_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     db_rule = db.query(models.CategorizationRule).filter(models.CategorizationRule.id == rule_id).first()
     if not db_rule:
         raise HTTPException(status_code=404, detail="Rule not found")
@@ -404,7 +454,7 @@ def delete_rule(rule_id: int, db: Session = Depends(get_db)):
     return {"detail": "Rule deleted"}
 
 @app.post("/recategorize")
-def recategorize_all(db: Session = Depends(get_db)):
+def recategorize_all(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     try:
         count = logic.reapply_rules(db)
         return {"message": "Recategorization complete", "updated_count": count}
@@ -414,11 +464,11 @@ def recategorize_all(db: Session = Depends(get_db)):
 # --- CATEGORIES CRUD ---
 
 @app.get("/categories", response_model=List[schemas.Category])
-def get_categories(db: Session = Depends(get_db)):
+def get_categories(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     return db.query(models.Category).order_by(models.Category.nombre).all()
 
 @app.post("/categories", response_model=schemas.Category)
-def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db)):
+def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     db_cat = models.Category(nombre=category.nombre, tipo=category.tipo)
     try:
         db.add(db_cat)
@@ -430,7 +480,7 @@ def create_category(category: schemas.CategoryCreate, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Category already exists")
 
 @app.delete("/categories/{cat_id}")
-def delete_category(cat_id: int, db: Session = Depends(get_db)):
+def delete_category(cat_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     db_cat = db.query(models.Category).filter(models.Category.id == cat_id).first()
     if not db_cat:
         raise HTTPException(status_code=404, detail="Category not found")
@@ -443,7 +493,7 @@ def delete_category(cat_id: int, db: Session = Depends(get_db)):
 # --- BACKUP & RESTORE ---
 
 @app.get("/backup/full")
-def backup_full(db: Session = Depends(get_db)):
+def backup_full(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     try:
         transactions = db.query(models.Transaction).all()
         rules = db.query(models.CategorizationRule).all()
@@ -476,7 +526,8 @@ def backup_full(db: Session = Depends(get_db)):
 async def restore_backup(
     file: UploadFile = File(...), 
     mode: str = Form(...), # "merge" or "replace"
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_active_user)
 ):
     import json
     content = await file.read()
@@ -563,7 +614,7 @@ async def restore_backup(
     return {"message": "Restoration Complete", "mode": mode, "items_added": added_count}
 
 @app.delete("/database/wipe")
-def wipe_database(db: Session = Depends(get_db)):
+def wipe_database(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
     """
     DANGER: Deletes ALL Transactions. Keeps Categories and Rules to avoid breaking the app structure.
     """
@@ -576,8 +627,35 @@ def wipe_database(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# --- USER MANAGEMENT (ADMIN ONLY) ---
+@app.get("/users", response_model=List[schemas.User])
+def get_users(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
+    return db.query(models.User).all()
+
+@app.post("/users", response_model=schemas.User)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
+    if db.query(models.User).filter(models.User.username == user.username).first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    hashed_password = auth.get_password_hash(user.password)
+    db_user = models.User(username=user.username, hashed_password=hashed_password, role=user.role)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.delete("/users/{user_id}")
+def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
+    db_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if db_user.username == "admin":
+         raise HTTPException(status_code=400, detail="Cannot delete admin user")
+    db.delete(db_user)
+    db.commit()
+    return {"message": "User deleted"}
+
 @app.get("/export/excel")
-def export_excel_endpoint(start_date: date, end_date: date, db: Session = Depends(get_db)):
+def export_excel_endpoint(start_date: date, end_date: date, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     transactions = db.query(models.Transaction).filter(
         models.Transaction.fecha >= start_date,
         models.Transaction.fecha <= end_date
@@ -595,7 +673,7 @@ def export_excel_endpoint(start_date: date, end_date: date, db: Session = Depend
 # ... (Existing exports)
 
 @app.get("/export/pdf")
-def export_pdf_endpoint(start_date: date, end_date: date, db: Session = Depends(get_db)):
+def export_pdf_endpoint(start_date: date, end_date: date, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     transactions = db.query(models.Transaction).filter(
         models.Transaction.fecha >= start_date,
         models.Transaction.fecha <= end_date

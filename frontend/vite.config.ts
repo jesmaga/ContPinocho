@@ -21,6 +21,9 @@ export default defineConfig({
       '/export': 'http://localhost:8000',
       '/backup': 'http://localhost:8000',
       '/recategorize': 'http://localhost:8000',
+      '/users': 'http://localhost:8000',
+      '/token': 'http://localhost:8000',
+      '/auth': 'http://localhost:8000',
     }
   }
 })

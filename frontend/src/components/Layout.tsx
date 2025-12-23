@@ -1,12 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Wallet, Settings, List, FileText, Shield } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { LayoutDashboard, Wallet, Settings, List, FileText, Shield, LogOut } from 'lucide-react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { PeriodSelector } from './PeriodSelector';
 import type { SystemMetadata } from '../types';
+import { useAuth } from '../context/AuthContext';
 
 export const Layout: React.FC = () => {
     const [lastUpdate, setLastUpdate] = useState<string>('');
+    const { logout, user } = useAuth();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
 
     useEffect(() => {
         const fetchLastUpdate = async () => {
@@ -53,26 +61,31 @@ export const Layout: React.FC = () => {
                         <List className="w-5 h-5" />
                         <span>Movimientos</span>
                     </NavLink>
-                    <NavLink
-                        to="/rules"
-                        className={({ isActive }) =>
-                            `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
-                            }`
-                        }
-                    >
-                        <Settings className="w-5 h-5" />
-                        <span>Reglas</span>
-                    </NavLink>
-                    <NavLink
-                        to="/categories-admin"
-                        className={({ isActive }) =>
-                            `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
-                            }`
-                        }
-                    >
-                        <List className="w-5 h-5" />
-                        <span>Categorías</span>
-                    </NavLink>
+
+                    {user?.role === 'admin' && (
+                        <>
+                            <NavLink
+                                to="/rules"
+                                className={({ isActive }) =>
+                                    `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
+                                    }`
+                                }
+                            >
+                                <Settings className="w-5 h-5" />
+                                <span>Reglas</span>
+                            </NavLink>
+                            <NavLink
+                                to="/categories-admin"
+                                className={({ isActive }) =>
+                                    `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
+                                    }`
+                                }
+                            >
+                                <List className="w-5 h-5" />
+                                <span>Categorías</span>
+                            </NavLink>
+                        </>
+                    )}
                     <NavLink
                         to="/reports"
                         className={({ isActive }) =>
@@ -83,16 +96,27 @@ export const Layout: React.FC = () => {
                         <FileText className="w-5 h-5" />
                         <span>Informes</span>
                     </NavLink>
-                    <NavLink
-                        to="/security"
-                        className={({ isActive }) =>
-                            `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
-                            }`
-                        }
+
+                    {user?.role === 'admin' && (
+                        <NavLink
+                            to="/security"
+                            className={({ isActive }) =>
+                                `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
+                                }`
+                            }
+                        >
+                            <Shield className="w-5 h-5" />
+                            <span>Seguridad</span>
+                        </NavLink>
+                    )}
+
+                    <button
+                        onClick={handleLogout}
+                        className="flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors text-red-400 hover:bg-[#2A2A2A] hover:text-red-300 mt-auto mb-4"
                     >
-                        <Shield className="w-5 h-5" />
-                        <span>Seguridad</span>
-                    </NavLink>
+                        <LogOut className="w-5 h-5" />
+                        <span>Cerrar Sesión</span>
+                    </button>
                 </nav>
             </aside>
 
