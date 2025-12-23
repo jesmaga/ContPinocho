@@ -471,7 +471,7 @@ def recategorize_all(db: Session = Depends(get_db), current_user: models.User = 
 # --- CATEGORIES CRUD ---
 
 @app.get("/categories", response_model=List[schemas.Category])
-def get_categories(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
+def get_categories(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):
     return db.query(models.Category).order_by(models.Category.nombre).all()
 
 @app.post("/categories", response_model=schemas.Category)
