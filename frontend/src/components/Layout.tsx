@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Wallet, Settings, List, FileText, Shield, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Settings, List, FileText, Shield, LogOut, User } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { PeriodSelector } from './PeriodSelector';
@@ -36,7 +36,7 @@ export const Layout: React.FC = () => {
             <aside className="w-64 bg-[#1E1E1E] border-r border-[#333] hidden md:flex flex-col sticky top-0 h-screen z-10">
                 <div className="p-6">
                     <div className="flex items-center justify-center mb-6">
-                        <img src="/Logo.png" alt="Logo" className="h-16 w-auto object-contain" />
+                        <img src="/Logo.png" alt="Logo" className="h-40 w-auto object-contain" />
                     </div>
                 </div>
                 <nav className="flex-1 px-4 space-y-2 mt-4">
