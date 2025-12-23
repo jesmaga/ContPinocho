@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { LayoutDashboard, Wallet, Settings, List, FileText, Shield, LogOut } from 'lucide-react';
+import { LayoutDashboard, Wallet, Settings, List, FileText, Shield, LogOut, User } from 'lucide-react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { PeriodSelector } from './PeriodSelector';
@@ -50,6 +50,17 @@ export const Layout: React.FC = () => {
                     >
                         <LayoutDashboard className="w-5 h-5" />
                         <span>Dashboard</span>
+                    </NavLink>
+
+                    <NavLink
+                        to="/profile"
+                        className={({ isActive }) =>
+                            `flex items-center space-x-3 px-4 py-3 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-500/10 text-indigo-400' : 'text-slate-400 hover:bg-[#2A2A2A] hover:text-slate-200'
+                            }`
+                        }
+                    >
+                        <User className="w-5 h-5" />
+                        <span>Mi Perfil</span>
                     </NavLink>
                     <NavLink
                         to="/transactions"

@@ -659,14 +659,32 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current
 
 @app.delete("/users/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_admin_user)):
-    db_user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not db_user:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    if db_user.username == "admin":
-         raise HTTPException(status_code=400, detail="Cannot delete admin user")
-    db.delete(db_user)
+    if user.username == "admin":
+        raise HTTPException(status_code=400, detail="Cannot delete default admin")
+    db.delete(user)
     db.commit()
     return {"message": "User deleted"}
+
+@app.put("/users/me/password")
+def change_password(
+    password_data: schemas.UserPasswordUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(auth.get_current_active_user)
+):
+    # 1. Verify old password
+    if not auth.verify_password(password_data.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
+    
+    # 2. Update with new password
+    hashed_password = auth.get_password_hash(password_data.new_password)
+    current_user.hashed_password = hashed_password
+    db.commit()
+    
+    return {"message": "Contraseña actualizada correctamente"}
+
 
 @app.get("/export/excel")
 def export_excel_endpoint(start_date: date, end_date: date, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_active_user)):

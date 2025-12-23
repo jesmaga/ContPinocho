@@ -8,6 +8,7 @@ import { AdminCategories } from './components/AdminCategories';
 import { TransactionsPage } from './components/TransactionsPage';
 import { ReportsPage } from './components/ReportsPage';
 import { SecurityPage } from './components/SecurityPage';
+import { ProfilePage } from './components/ProfilePage';
 import { Login } from './components/Login';
 import { RequireAuth } from './components/RequireAuth';
 
@@ -30,6 +31,7 @@ function App() {
               <Route path="categories-admin" element={<AdminCategories />} />
               <Route path="reports" element={<ReportsPage />} />
               <Route path="security" element={<SecurityPage />} />
+              <Route path="profile" element={<ProfilePage />} />
             </Route>
           </Routes>
         </BrowserRouter>

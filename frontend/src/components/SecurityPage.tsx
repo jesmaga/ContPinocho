@@ -119,7 +119,7 @@ export const SecurityPage: React.FC = () => {
             fetchUsers();
         } catch (error) {
             console.error("Error creating user", error);
-            alert("Error al crear usuario. El nombre puede estar duplicado.");
+            alert("Error al crear usuario. El email puede estar duplicado o tener un formato inválido.");
         }
     };
 
@@ -165,7 +165,7 @@ export const SecurityPage: React.FC = () => {
                         <thead>
                             <tr className="border-b border-[#333] text-slate-400 text-sm">
                                 <th className="p-3">ID</th>
-                                <th className="p-3">Usuario</th>
+                                <th className="p-3">Email</th>
                                 <th className="p-3">Rol</th>
                                 <th className="p-3 text-right">Acciones</th>
                             </tr>
@@ -216,9 +216,9 @@ export const SecurityPage: React.FC = () => {
 
                         <form onSubmit={handleCreateUser} className="space-y-4">
                             <div>
-                                <label className="block text-sm text-slate-400 mb-1">Nombre de Usuario</label>
+                                <label className="block text-sm text-slate-400 mb-1">Email</label>
                                 <input
-                                    type="text"
+                                    type="email"
                                     required
                                     value={newUserUsername}
                                     onChange={e => setNewUserUsername(e.target.value)}
