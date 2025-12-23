@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Query, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload 
+from sqlalchemy import inspect, text
 from typing import List, Optional
 import models, schemas, logic, reports, auth
 import io
@@ -71,69 +72,75 @@ async def lifespan(app: FastAPI):
     # Startup: Seed Data
     db = next(get_db())
     
-    # Seed Categories
-    if not db.query(models.Category).first():
-        print("Seeding initial categories...")
-        for cat_name, cat_type in INITIAL_CATEGORIES:
-            try:
-                db.add(models.Category(nombre=cat_name, tipo=cat_type))
-            except Exception:
-                pass 
-        db.commit()
-
-    # Check if rules exist
-    if not db.query(models.CategorizationRule).first():
-        print("Seeding initial rules...")
-        for keyword, category, priority in INITIAL_RULES:
-            rule = models.CategorizationRule(
-                palabra_clave=keyword, 
-                categoria_asignada=category,
-                prioridad=priority
-            )
-            db.add(rule)
-        db.commit()
-        db.commit()
-        print("Seeding complete.")
-        
-    # MIGRATION: Check for is_locked column
+    # --- 1. SEED CATEGORIES ---
     try:
-        # This is a SQLite specific check
-        from sqlalchemy import text
-        result = db.execute(text("PRAGMA table_info(transacciones)"))
-        columns = [row[1] for row in result]
-        if columns and 'is_locked' not in columns:
-            print("Migrating: Adding is_locked column...")
-            db.execute(text("ALTER TABLE transacciones ADD COLUMN is_locked BOOLEAN DEFAULT 0"))
+        if not db.query(models.Category).first():
+            print("Seeding initial categories...")
+            for cat_name, cat_type in INITIAL_CATEGORIES:
+                db.add(models.Category(nombre=cat_name, tipo=cat_type))
             db.commit()
     except Exception as e:
-        print(f"Migration check failed: {e}")
+        print(f"Error seeding categories: {e}")
+        db.rollback() # ¡Importante! Limpia la sesión si falla
 
-    # MIGRATION: Check for role column in users
+    # --- 2. SEED RULES ---
     try:
-        from sqlalchemy import text
-        result = db.execute(text("PRAGMA table_info(users)"))
-        columns = [row[1] for row in result]
-        if columns and 'role' not in columns:
+        if not db.query(models.CategorizationRule).first():
+            print("Seeding initial rules...")
+            for keyword, category, priority in INITIAL_RULES:
+                rule = models.CategorizationRule(
+                    palabra_clave=keyword, 
+                    categoria_asignada=category,
+                    prioridad=priority
+                )
+                db.add(rule)
+            db.commit()
+            print("Seeding rules complete.")
+    except Exception as e:
+        print(f"Error seeding rules: {e}")
+        db.rollback()
+
+    # --- 3. MIGRATIONS (FIXED FOR POSTGRESQL & SQLITE) ---
+    # Usamos 'inspect' para preguntar las columnas sin usar SQL puro
+    try:
+        inspector = inspect(db.get_bind())
+        
+        # A) Check transacciones -> is_locked
+        columns_trans = [col['name'] for col in inspector.get_columns('transacciones')]
+        if 'is_locked' not in columns_trans:
+            print("Migrating: Adding is_locked column...")
+            # 'DEFAULT FALSE' funciona en Postgres y SQLite (0)
+            db.execute(text("ALTER TABLE transacciones ADD COLUMN is_locked BOOLEAN DEFAULT FALSE"))
+            db.commit()
+            
+        # B) Check users -> role
+        columns_users = [col['name'] for col in inspector.get_columns('users')]
+        if 'role' not in columns_users:
             print("Migrating: Adding role column to users...")
             db.execute(text("ALTER TABLE users ADD COLUMN role VARCHAR DEFAULT 'user'"))
             db.commit()
+            
     except Exception as e:
-         print(f"Migration check for users failed: {e}")
+        print(f"Migration failed: {e}")
+        db.rollback() # CRUCIAL: Si falla la migración, reseteamos para que el login no falle después
 
-    # Seed Admin User
-    admin_user = db.query(models.User).filter(models.User.username == "admin").first()
-    if not admin_user:
-        print("Seeding admin user...")
-        hashed_pwd = auth.get_password_hash("admin")
-        user = models.User(username="admin", hashed_password=hashed_pwd, role="admin")
-        db.add(user)
-        db.commit()
-    else:
-        # Ensure admin has admin role (fix for existing admin)
-        if admin_user.role != "admin":
-             print("Updating admin privileges...")
-             admin_user.role = "admin"
-             db.commit()
+    # --- 4. SEED ADMIN USER ---
+    try:
+        admin_user = db.query(models.User).filter(models.User.username == "admin").first()
+        if not admin_user:
+            print("Seeding admin user...")
+            hashed_pwd = auth.get_password_hash("admin")
+            user = models.User(username="admin", hashed_password=hashed_pwd, role="admin")
+            db.add(user)
+            db.commit()
+        else:
+            if admin_user.role != "admin":
+                 print("Updating admin privileges...")
+                 admin_user.role = "admin"
+                 db.commit()
+    except Exception as e:
+        print(f"Error seeding admin: {e}")
+        db.rollback()
     
     yield
     # Shutdown logic (if any)
