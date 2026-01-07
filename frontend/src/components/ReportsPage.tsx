@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FileText, Table, Calendar } from 'lucide-react';
+import axios from 'axios';
 
 export const ReportsPage: React.FC = () => {
     // We reuse the global PeriodContext for "Preset" logic if desired, 
@@ -42,17 +43,53 @@ export const ReportsPage: React.FC = () => {
         }
     };
 
-    const handleDownload = (type: 'excel' | 'pdf') => {
+    const handleDownload = async (type: 'excel' | 'pdf') => {
         const { start, end } = getDates();
         if (!start || !end) {
             alert("Por favor selecciona un rango de fechas válido.");
             return;
         }
 
-        // Trigger download
-        // We use window.open or create a link element
-        const url = `/export/${type}?start_date=${start}&end_date=${end}`;
-        window.open(url, '_blank');
+        try {
+            // Indicador visual de carga (el cursor cambia a reloj de arena)
+            document.body.style.cursor = 'wait';
+
+            // Hacemos la petición con AXIOS para que incluya el TOKEN de usuario
+            const response = await axios.get(`/export/${type}`, {
+                params: {
+                    start_date: start,
+                    end_date: end
+                },
+                // IMPORTANTE: Le decimos a Axios que la respuesta es un archivo binario (Blob)
+                responseType: 'blob'
+            });
+
+            // Creamos una URL temporal en memoria para el archivo recibido
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+
+            // Creamos un enlace invisible en el HTML
+            const link = document.createElement('a');
+            link.href = url;
+
+            // Definimos el nombre del archivo según el tipo
+            const extension = type === 'excel' ? 'xlsx' : 'pdf';
+            link.setAttribute('download', `reporte_${start}_${end}.${extension}`);
+
+            // Simulamos el clic para iniciar la descarga
+            document.body.appendChild(link);
+            link.click();
+
+            // Limpiamos el DOM y la memoria
+            link.parentNode?.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+        } catch (error) {
+            console.error("Error descargando el archivo:", error);
+            alert("No se pudo descargar el informe. Verifica que tu sesión esté activa.");
+        } finally {
+            // Restauramos el cursor
+            document.body.style.cursor = 'default';
+        }
     };
 
     return (
